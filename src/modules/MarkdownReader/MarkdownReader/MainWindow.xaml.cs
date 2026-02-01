@@ -3,14 +3,14 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Threading.Tasks;
 using ManagedCommon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WinUIEx;
-using System.Threading.Tasks;
-using System.Collections.Generic;
 
 namespace MarkdownReader
 {
@@ -20,7 +20,6 @@ namespace MarkdownReader
 
         public ObservableCollection<Models.TocItem> TocItems { get; } = new ObservableCollection<Models.TocItem>();
 
-        private string currentMarkdown;
         private string currentFilePath;
 
         public MainWindow()
@@ -90,8 +89,8 @@ This is a persistent viewer with:
 1. Drag a Markdown file here (Future feature)
 2. Or right-click a `.md` file in Explorer and select Open.
 ";
-            
-            // For the welcome page, parsing is fast enough to do synchronously, 
+
+            // For the welcome page, parsing is fast enough to do synchronously,
             // but we use the shared helper for consistency.
             return ParseMarkdownContent(markdown, "Welcome", "Markdown Reader - Welcome");
         }
@@ -113,7 +112,7 @@ This is a persistent viewer with:
                     string markdown = await File.ReadAllTextAsync(filePath);
                     string fileName = Path.GetFileName(filePath);
                     string title = $"{fileName} - Markdown Reader";
-                    
+
                     return ParseMarkdownContent(markdown, filePath, title);
                 });
             }
@@ -121,6 +120,7 @@ This is a persistent viewer with:
             {
                 Logger.LogError($"Error loading file {filePath}: {ex.Message}");
                 var fallback = LoadWelcomePage();
+
                 // Override title to show error
                 return fallback with { Title = "Markdown Reader - Error Loading File" };
             }
@@ -131,7 +131,7 @@ This is a persistent viewer with:
             // CPU-bound work
             var toc = Helpers.MarkdownParser.ExtractTableOfContents(markdown);
             string html = Helpers.MarkdownParser.ParseMarkdown(markdown, filePath);
-            
+
             return new ParsedData(html, title, toc);
         }
 
@@ -149,7 +149,7 @@ This is a persistent viewer with:
 
             // Render content
             MarkdownWebView.NavigateToString(data.Html);
-            
+
             // Keep track for potential reloads (optional, based on original logic)
             // currentMarkdown = ...; // If needed for other features
         }
