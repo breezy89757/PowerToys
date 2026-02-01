@@ -3,8 +3,13 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using Markdig;
+using Markdig.Renderers.Html;
+using Markdig.Syntax;
 using Microsoft.PowerToys.FilePreviewCommon;
 
 namespace MarkdownReader.Helpers
@@ -35,6 +40,44 @@ mermaid.initialize({ startOnLoad: true });
             html = html.Replace("</body>", mermaidScript + "</body>", StringComparison.Ordinal);
 
             return html;
+        }
+
+        public static List<Models.TocItem> ExtractTableOfContents(string markdownContent)
+        {
+            var tocItems = new List<Models.TocItem>();
+
+            var pipeline = new MarkdownPipelineBuilder()
+                .UseAdvancedExtensions()
+                .UseAutoIdentifiers()
+                .Build();
+
+            var document = Markdown.Parse(markdownContent, pipeline);
+
+            var headings = document.Descendants<HeadingBlock>();
+
+            foreach (var heading in headings)
+            {
+                var inlineContent = heading.Inline?.FirstChild;
+                var titleText = inlineContent?.ToString() ?? string.Empty;
+
+                var id = heading.GetAttributes()?.Id ?? GenerateId(titleText);
+
+                tocItems.Add(new Models.TocItem
+                {
+                    Title = titleText,
+                    Level = heading.Level,
+                    Id = id,
+                });
+            }
+
+            return tocItems;
+        }
+
+        private static string GenerateId(string text)
+        {
+            return text.ToLower(CultureInfo.InvariantCulture)
+                       .Replace(" ", "-", StringComparison.Ordinal)
+                       .Replace("'", string.Empty, StringComparison.Ordinal);
         }
     }
 }
