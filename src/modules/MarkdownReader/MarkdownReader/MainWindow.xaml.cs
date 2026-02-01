@@ -9,11 +9,15 @@ using ManagedCommon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WinUIEx;
+using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace MarkdownReader
 {
     public sealed partial class MainWindow : WindowEx
     {
+        private record struct ParsedData(string Html, string Title, List<Models.TocItem> Toc);
+
         public ObservableCollection<Models.TocItem> TocItems { get; } = new ObservableCollection<Models.TocItem>();
 
         private string currentMarkdown;
@@ -37,22 +41,44 @@ namespace MarkdownReader
 
         private async void InitializeAsync()
         {
-            await MarkdownWebView.EnsureCoreWebView2Async();
+            // 1. Start WebView2 Initialization (IO/IPC bound)
+            // We capture the operation but don't await immediately, allowing concurrency.
+            var webViewInit = MarkdownWebView.EnsureCoreWebView2Async();
 
-            // If a file path was provided, load it; otherwise, show demo content
-            if (!string.IsNullOrEmpty(currentFilePath))
+            // 2. Start Content Loading & Parsing (IO/CPU bound)
+            // This runs in parallel with WebView initialization.
+            var contentTask = LoadContentAsync();
+
+            try
             {
-                LoadMarkdownFromFile(currentFilePath);
+                // 3. Wait for both to complete
+                await webViewInit;
+                var data = await contentTask;
+
+                // 4. Update UI
+                ApplyParsedData(data);
             }
-            else
+            catch (Exception ex)
             {
-                LoadWelcomePage();
+                Logger.LogError($"Startup initialization failed: {ex.Message}");
             }
         }
 
-        private void LoadWelcomePage()
+        private async Task<ParsedData> LoadContentAsync()
         {
-            currentMarkdown = @"
+            if (!string.IsNullOrEmpty(currentFilePath))
+            {
+                return await LoadMarkdownFromFileAsync(currentFilePath);
+            }
+            else
+            {
+                return LoadWelcomePage();
+            }
+        }
+
+        private ParsedData LoadWelcomePage()
+        {
+            string markdown = @"
 # Welcome to PowerToys Markdown Reader
 
 This is a persistent viewer with:
@@ -64,56 +90,68 @@ This is a persistent viewer with:
 1. Drag a Markdown file here (Future feature)
 2. Or right-click a `.md` file in Explorer and select Open.
 ";
-
-            this.Title = "Markdown Reader - Welcome";
-            LoadMarkdown(currentMarkdown, "Welcome");
+            
+            // For the welcome page, parsing is fast enough to do synchronously, 
+            // but we use the shared helper for consistency.
+            return ParseMarkdownContent(markdown, "Welcome", "Markdown Reader - Welcome");
         }
 
-        private void LoadMarkdownFromFile(string filePath)
+        private async Task<ParsedData> LoadMarkdownFromFileAsync(string filePath)
         {
             try
             {
                 if (!File.Exists(filePath))
                 {
                     Logger.LogError($"File not found: {filePath}");
-                    LoadWelcomePage();
-                    return;
+                    return LoadWelcomePage();
                 }
 
-                // Read the markdown file
-                currentMarkdown = File.ReadAllText(filePath);
-                currentFilePath = filePath;
-
-                // Update window title with filename
-                string fileName = Path.GetFileName(filePath);
-                this.Title = $"{fileName} - Markdown Reader";
-
-                // Load the markdown content
-                LoadMarkdown(currentMarkdown, filePath);
-
-                Logger.LogInfo($"Successfully loaded file: {filePath}");
+                // Offload file reading and parsing to background thread to avoid blocking UI
+                // while WebView is initializing.
+                return await Task.Run(async () =>
+                {
+                    string markdown = await File.ReadAllTextAsync(filePath);
+                    string fileName = Path.GetFileName(filePath);
+                    string title = $"{fileName} - Markdown Reader";
+                    
+                    return ParseMarkdownContent(markdown, filePath, title);
+                });
             }
             catch (Exception ex)
             {
                 Logger.LogError($"Error loading file {filePath}: {ex.Message}");
-
-                // Show error and fall back to demo content
-                LoadWelcomePage();
-                this.Title = "Markdown Reader - Error Loading File";
+                var fallback = LoadWelcomePage();
+                // Override title to show error
+                return fallback with { Title = "Markdown Reader - Error Loading File" };
             }
         }
 
-        private void LoadMarkdown(string markdown, string filePath)
+        private ParsedData ParseMarkdownContent(string markdown, string filePath, string title)
         {
-            TocItems.Clear();
+            // CPU-bound work
             var toc = Helpers.MarkdownParser.ExtractTableOfContents(markdown);
-            foreach (var item in toc)
+            string html = Helpers.MarkdownParser.ParseMarkdown(markdown, filePath);
+            
+            return new ParsedData(html, title, toc);
+        }
+
+        private void ApplyParsedData(ParsedData data)
+        {
+            // Update Title
+            this.Title = data.Title;
+
+            // Update TOC
+            TocItems.Clear();
+            foreach (var item in data.Toc)
             {
                 TocItems.Add(item);
             }
 
-            string html = Helpers.MarkdownParser.ParseMarkdown(markdown, filePath);
-            MarkdownWebView.NavigateToString(html);
+            // Render content
+            MarkdownWebView.NavigateToString(data.Html);
+            
+            // Keep track for potential reloads (optional, based on original logic)
+            // currentMarkdown = ...; // If needed for other features
         }
 
         private async void TocListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
