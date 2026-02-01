@@ -16,8 +16,11 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <OutputPath>..\..\..\..\$(Platform)\$(Configuration)\WinUI3Apps</OutputPath>
     <AssemblyName>PowerToys.MarkdownReader</AssemblyName>
+    <AssemblyDescription>PowerToys Markdown Reader</AssemblyDescription>
+    <GenerateSatelliteAssembliesForCore>true</GenerateSatelliteAssembliesForCore>
     <ProjectPriFileName>PowerToys.MarkdownReader.pri</ProjectPriFileName>
     <CsWinRTDependentMetadataPaths>$(SolutionDir)$(Platform)\$(Configuration)</CsWinRTDependentMetadataPaths>
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +31,7 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
     <PackageReference Include="WinUIEx" />
     <PackageReference Include="Microsoft.Web.WebView2" />
+    <PackageReference Include="Markdig.Signed" />
     <PackageReference Include="CommunityToolkit.Common" />
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
