@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.IO;
 using ManagedCommon;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
@@ -23,13 +24,31 @@ namespace MarkdownReader
 
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
+            // Get command line arguments
             string[] cmdArgs = Environment.GetCommandLineArgs();
+            string filePath = null;
+
+            // Check if a file path was passed as an argument
+            // cmdArgs[0] is the executable path, cmdArgs[1] is the first argument
             if (cmdArgs != null && cmdArgs.Length >= 2)
             {
-                AppFilename = cmdArgs[1];
+                string potentialPath = cmdArgs[1];
+
+                // Validate that the path exists and is a file
+                if (File.Exists(potentialPath))
+                {
+                    filePath = potentialPath;
+                    AppFilename = filePath;
+                }
+                else
+                {
+                    // Log or handle invalid path
+                    Logger.LogWarning($"Invalid file path provided: {potentialPath}");
+                }
             }
 
-            mainWindow = new MainWindow();
+            // Create main window with optional file path
+            mainWindow = new MainWindow(filePath);
             mainWindow.Activate();
         }
     }

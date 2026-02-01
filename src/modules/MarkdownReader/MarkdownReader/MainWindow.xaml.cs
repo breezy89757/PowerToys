@@ -4,6 +4,8 @@
 
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
+using ManagedCommon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WinUIEx;
@@ -15,14 +17,21 @@ namespace MarkdownReader
         public ObservableCollection<Models.TocItem> TocItems { get; } = new ObservableCollection<Models.TocItem>();
 
         private string currentMarkdown;
+        private string currentFilePath;
 
         public MainWindow()
+            : this(null)
+        {
+        }
+
+        public MainWindow(string filePath)
         {
             this.InitializeComponent();
 
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(TitleBar);
 
+            currentFilePath = filePath;
             InitializeAsync();
         }
 
@@ -30,47 +39,71 @@ namespace MarkdownReader
         {
             await MarkdownWebView.EnsureCoreWebView2Async();
 
-            currentMarkdown = @"
-# Markdown Reader Demo
-
-This is a **bold** text and *italic* text.
-
-## Mermaid Diagram
-
-```mermaid
-graph TD;
-    A[Markdown] -->|Parse| B(HTML);
-    B -->|Inject| C{Mermaid.js};
-    C -->|Render| D[WebView2];
-```
-
-## Table
-
-| Header 1 | Header 2 |
-| --- | --- |
-| Code | Value |
-| A | 1 |
-| B | 2 |
-
-## Features
-
-### Sub Feature 1
-
-This is a sub feature.
-
-### Sub Feature 2
-
-Another sub feature with more content.
-
-## Conclusion
-
-That's all for now!
-";
-
-            LoadMarkdown(currentMarkdown);
+            // If a file path was provided, load it; otherwise, show demo content
+            if (!string.IsNullOrEmpty(currentFilePath))
+            {
+                LoadMarkdownFromFile(currentFilePath);
+            }
+            else
+            {
+                LoadWelcomePage();
+            }
         }
 
-        private void LoadMarkdown(string markdown)
+        private void LoadWelcomePage()
+        {
+            currentMarkdown = @"
+# Welcome to PowerToys Markdown Reader
+
+This is a persistent viewer with:
+* **Dynamic TOC** navigation
+* **Mermaid.js** support
+* **Shell integration** (Right-click to open)
+
+## How to use
+1. Drag a Markdown file here (Future feature)
+2. Or right-click a `.md` file in Explorer and select Open.
+";
+
+            this.Title = "Markdown Reader - Welcome";
+            LoadMarkdown(currentMarkdown, "Welcome");
+        }
+
+        private void LoadMarkdownFromFile(string filePath)
+        {
+            try
+            {
+                if (!File.Exists(filePath))
+                {
+                    Logger.LogError($"File not found: {filePath}");
+                    LoadWelcomePage();
+                    return;
+                }
+
+                // Read the markdown file
+                currentMarkdown = File.ReadAllText(filePath);
+                currentFilePath = filePath;
+
+                // Update window title with filename
+                string fileName = Path.GetFileName(filePath);
+                this.Title = $"{fileName} - Markdown Reader";
+
+                // Load the markdown content
+                LoadMarkdown(currentMarkdown, filePath);
+
+                Logger.LogInfo($"Successfully loaded file: {filePath}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error loading file {filePath}: {ex.Message}");
+
+                // Show error and fall back to demo content
+                LoadWelcomePage();
+                this.Title = "Markdown Reader - Error Loading File";
+            }
+        }
+
+        private void LoadMarkdown(string markdown, string filePath)
         {
             TocItems.Clear();
             var toc = Helpers.MarkdownParser.ExtractTableOfContents(markdown);
@@ -79,7 +112,7 @@ That's all for now!
                 TocItems.Add(item);
             }
 
-            string html = Helpers.MarkdownParser.ParseMarkdown(markdown, "C:\\FakePath\\Demo.md");
+            string html = Helpers.MarkdownParser.ParseMarkdown(markdown, filePath);
             MarkdownWebView.NavigateToString(html);
         }
 
